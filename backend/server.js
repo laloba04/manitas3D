@@ -117,42 +117,32 @@ app.post('/api/coloreable', upload.single('imagen'), async (req, res) => {
     const imageData = fs.readFileSync(req.file.path);
     fs.unlinkSync(req.file.path);
 
-    // 2. Describir imagen con HuggingFace BLIP (gratis con token)
-    console.log(`[coloreable] Describiendo imagen con BLIP…`);
-    const blipRes = await fetch(
-      'https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-base',
+    // 2. Generar dibujo coloreable con HuggingFace FLUX
+    const promptEN = `coloring page, black outline only on white background, no color fill, clean thick lines, children coloring book style, ${instruccion}`;
+    console.log(`[coloreable] Generando con FLUX: "${promptEN.slice(0, 80)}…"`);
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 120000);
+    const hfRes = await fetch(
+      'https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell',
       {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${HF_TOKEN}`,
-          'Content-Type': req.file.mimetype
+          'Content-Type': 'application/json'
         },
-        body: imageData
+        body: JSON.stringify({ inputs: promptEN }),
+        signal: controller.signal
       }
     );
-
-    let descripcion = 'a 3d printed object';
-    if (blipRes.ok) {
-      const blipData = await blipRes.json();
-      descripcion = blipData?.[0]?.generated_text || descripcion;
-      console.log(`[coloreable] BLIP descripcion: "${descripcion}"`);
-    } else {
-      console.log(`[coloreable] BLIP falló (${blipRes.status}), usando descripción genérica`);
-    }
-
-    // 3. Generar dibujo coloreable con Pollinations usando la descripción
-    const promptEN = `coloring page of ${descripcion}, black outline only on white background, no color fill, clean thick lines, children coloring book style, ${instruccion}`;
-    const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptEN)}?width=1024&height=1024&nologo=true&model=flux`;
-
-    console.log(`[coloreable] Llamando a Pollinations…`);
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 120000);
-    const imgRes = await fetch(pollinationsUrl, { signal: controller.signal });
     clearTimeout(timer);
 
-    if (!imgRes.ok) throw new Error(`Pollinations error: ${imgRes.status}`);
+    if (!hfRes.ok) {
+      const errText = await hfRes.text();
+      throw new Error(`HF FLUX error ${hfRes.status}: ${errText.slice(0, 200)}`);
+    }
 
-    const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
+    const imgBuffer = Buffer.from(await hfRes.arrayBuffer());
     const resultBase64 = imgBuffer.toString('base64');
 
     res.json({
