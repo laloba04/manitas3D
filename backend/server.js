@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
 import fetch from 'node-fetch';
+import FormData from 'form-data';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
@@ -116,7 +117,6 @@ app.post('/api/coloreable', upload.single('imagen'), async (req, res) => {
     const imageData = fs.readFileSync(req.file.path);
     fs.unlinkSync(req.file.path);
 
-    const FormData = (await import('form-data')).default;
     const form = new FormData();
     form.append('file', imageData, { filename: req.file.originalname, contentType: req.file.mimetype });
 
@@ -139,7 +139,7 @@ app.post('/api/coloreable', upload.single('imagen'), async (req, res) => {
 
     if (!imgRes.ok) throw new Error(`Pollinations error: ${imgRes.status}`)
 
-    const imgBuffer = await imgRes.buffer()
+    const imgBuffer = Buffer.from(await imgRes.arrayBuffer())
     const resultBase64 = imgBuffer.toString('base64')
 
     res.json({
