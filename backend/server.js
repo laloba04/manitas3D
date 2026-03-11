@@ -56,11 +56,19 @@ app.post('/api/texto-a-3d', async (req, res) => {
 app.post('/api/foto-a-3d', upload.single('imagen'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Falta la imagen' });
 
+  const instruccion = req.body.instruccion || '';
+
   try {
-    console.log(`[foto-a-3d] ${req.file.originalname}`);
+    console.log(`[foto-a-3d] ${req.file.originalname} | instruccion: "${instruccion}"`);
     const imageData = fs.readFileSync(req.file.path);
     const base64Image = `data:${req.file.mimetype};base64,${imageData.toString('base64')}`;
     fs.unlinkSync(req.file.path);
+
+    // Si hay instrucción de texto, la usamos junto a la imagen (fn_index 0)
+    // Si no, solo imagen (fn_index 1)
+    const body = instruccion
+      ? { fn_index: 0, data: [instruccion, base64Image, true, 0.5, 0.5] }
+      : { fn_index: 1, data: [base64Image, true, 0.5, 0.5] };
 
     const response = await fetch(`${HF_SPACE_URL}/api/predict`, {
       method: 'POST',
@@ -68,7 +76,7 @@ app.post('/api/foto-a-3d', upload.single('imagen'), async (req, res) => {
         'Content-Type': 'application/json',
         ...(HF_TOKEN && { 'Authorization': `Bearer ${HF_TOKEN}` })
       },
-      body: JSON.stringify({ fn_index: 1, data: [base64Image, true, 0.5, 0.5] })
+      body: JSON.stringify(body)
     });
 
     if (!response.ok) throw new Error(`Error Space: ${response.status}`);
@@ -104,18 +112,27 @@ app.post('/api/coloreable', upload.single('imagen'), async (req, res) => {
   try {
     console.log(`[coloreable] "${instruccion.slice(0, 60)}…"`);
 
-    // Subir la imagen a Pollinations como referencia (image-to-image)
+    // Subir imagen a tmpfiles.org para obtener URL pública
     const imageData = fs.readFileSync(req.file.path);
-    const base64Image = `data:${req.file.mimetype};base64,${imageData.toString('base64')}`;
     fs.unlinkSync(req.file.path);
 
+    const FormData = (await import('form-data')).default;
+    const form = new FormData();
+    form.append('file', imageData, { filename: req.file.originalname, contentType: req.file.mimetype });
+
+    console.log(`[coloreable] Subiendo imagen a tmpfiles.org…`);
+    const uploadRes = await fetch('https://tmpfiles.org/api/v1/upload', { method: 'POST', body: form, headers: form.getHeaders() });
+    if (!uploadRes.ok) throw new Error(`Upload error: ${uploadRes.status}`);
+    const uploadData = await uploadRes.json();
+    // tmpfiles devuelve https://tmpfiles.org/XXXX/file.jpg → necesitamos https://tmpfiles.org/dl/XXXX/file.jpg
+    const tmpUrl = uploadData.data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
+    console.log(`[coloreable] Imagen pública: ${tmpUrl}`);
+
     // Construir prompt en inglés para dibujo coloreable
-    const promptEN = `coloring page, black outline only on white background, no color fill, clean thick lines, children coloring book style, ${instruccion}, based on the reference image`
+    const promptEN = `coloring page, black outline only on white background, no color fill, clean thick lines, children coloring book style, ${instruccion}`
 
     const encodedPrompt = encodeURIComponent(promptEN)
-
-    // Pollinations image-to-image: enviamos la imagen como referencia
-    const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&nologo=true&model=flux&image=${encodeURIComponent(base64Image)}`
+    const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&nologo=true&model=flux&image=${encodeURIComponent(tmpUrl)}`
 
     console.log(`[coloreable] Llamando a Pollinations…`)
     const imgRes = await fetch(pollinationsUrl, { timeout: 120000 })
