@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 const API = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:3001',
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3001',
   timeout: 300000 // 5 minutos (la generación puede tardar)
 })
 
@@ -28,12 +28,13 @@ export async function generarColoreable(file, instruccion) {
   })
   return data
 }
-  const base = process.env.REACT_APP_API_URL || 'http://localhost:3001'
+export function getDownloadUrl(filename, formato) {
+  const base = import.meta.env.VITE_API_URL || 'http://localhost:3001'
   return `${base}/api/descargar/${filename}/${formato}`
 }
 
 export function getModelUrl(modelUrl) {
-  const base = process.env.REACT_APP_API_URL || 'http://localhost:3001'
+  const base = import.meta.env.VITE_API_URL || 'http://localhost:3001'
   return `${base}${modelUrl}`
 }
 
