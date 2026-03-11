@@ -103,7 +103,7 @@ app.get('/api/estado', async (req, res) => {
   }
 });
 
-// ── FOTO → DIBUJO COLOREABLE (Pollinations AI, gratis) ───────
+// ── FOTO → DIBUJO COLOREABLE ───────────────────────────────────
 app.post('/api/coloreable', upload.single('imagen'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Falta la imagen' });
 
@@ -111,47 +111,60 @@ app.post('/api/coloreable', upload.single('imagen'), async (req, res) => {
     'silueta en blanco y negro de la figura, dibujo para colorear, líneas limpias';
 
   try {
-    console.log(`[coloreable] "${instruccion.slice(0, 60)}…"`);
+    console.log(`[coloreable] instruccion: "${instruccion.slice(0, 60)}…"`);
 
-    // Subir imagen a tmpfiles.org para obtener URL pública
+    // 1. Leer imagen y convertir a base64
     const imageData = fs.readFileSync(req.file.path);
     fs.unlinkSync(req.file.path);
 
-    const form = new FormData();
-    form.append('file', imageData, { filename: req.file.originalname, contentType: req.file.mimetype });
+    // 2. Describir imagen con HuggingFace BLIP (gratis con token)
+    console.log(`[coloreable] Describiendo imagen con BLIP…`);
+    const blipRes = await fetch(
+      'https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-base',
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${HF_TOKEN}`,
+          'Content-Type': req.file.mimetype
+        },
+        body: imageData
+      }
+    );
 
-    console.log(`[coloreable] Subiendo imagen a tmpfiles.org…`);
-    const uploadRes = await fetch('https://tmpfiles.org/api/v1/upload', { method: 'POST', body: form, headers: form.getHeaders() });
-    if (!uploadRes.ok) throw new Error(`Upload error: ${uploadRes.status}`);
-    const uploadData = await uploadRes.json();
-    // tmpfiles devuelve https://tmpfiles.org/XXXX/file.jpg → necesitamos https://tmpfiles.org/dl/XXXX/file.jpg
-    const tmpUrl = uploadData.data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
-    console.log(`[coloreable] Imagen pública: ${tmpUrl}`);
+    let descripcion = 'a 3d printed object';
+    if (blipRes.ok) {
+      const blipData = await blipRes.json();
+      descripcion = blipData?.[0]?.generated_text || descripcion;
+      console.log(`[coloreable] BLIP descripcion: "${descripcion}"`);
+    } else {
+      console.log(`[coloreable] BLIP falló (${blipRes.status}), usando descripción genérica`);
+    }
 
-    // Construir prompt en inglés para dibujo coloreable
-    const promptEN = `coloring page, black outline only on white background, no color fill, clean thick lines, children coloring book style, ${instruccion}`
+    // 3. Generar dibujo coloreable con Pollinations usando la descripción
+    const promptEN = `coloring page of ${descripcion}, black outline only on white background, no color fill, clean thick lines, children coloring book style, ${instruccion}`;
+    const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptEN)}?width=1024&height=1024&nologo=true&model=flux`;
 
-    const encodedPrompt = encodeURIComponent(promptEN)
-    const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&nologo=true&model=flux&image=${encodeURIComponent(tmpUrl)}`
+    console.log(`[coloreable] Llamando a Pollinations…`);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 120000);
+    const imgRes = await fetch(pollinationsUrl, { signal: controller.signal });
+    clearTimeout(timer);
 
-    console.log(`[coloreable] Llamando a Pollinations…`)
-    const imgRes = await fetch(pollinationsUrl, { timeout: 120000 })
+    if (!imgRes.ok) throw new Error(`Pollinations error: ${imgRes.status}`);
 
-    if (!imgRes.ok) throw new Error(`Pollinations error: ${imgRes.status}`)
-
-    const imgBuffer = Buffer.from(await imgRes.arrayBuffer())
-    const resultBase64 = imgBuffer.toString('base64')
+    const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
+    const resultBase64 = imgBuffer.toString('base64');
 
     res.json({
       success: true,
       imagen: `data:image/png;base64,${resultBase64}`,
       prompt: promptEN
-    })
+    });
 
   } catch (err) {
-    if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path)
-    console.error('[coloreable]', err.message)
-    res.status(500).json({ error: err.message })
+    if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    console.error('[coloreable]', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
