@@ -1,0 +1,37 @@
+
+/* ── COLOREABLE ── */
+:root {
+  --orange: #f97316;
+  --orange-light: #fff7ed;
+  --orange-dark: #ea580c;
+}
+.card-orange { border: 2px solid rgba(249,115,22,0.15); }
+.orange { color: var(--orange-dark); }
+.tab-active-orange { background: var(--orange) !important; color: white !important; box-shadow: 0 4px 14px rgba(249,115,22,0.35); }
+.btn-orange { background: var(--orange); color: white; box-shadow: 0 5px 18px rgba(249,115,22,0.35); }
+.btn-orange:hover:not(:disabled) { background: var(--orange-dark); transform: translateY(-2px); }
+.upload-orange { border-color: rgba(249,115,22,0.35); background: var(--orange-light); }
+.upload-orange:hover { border-color: var(--orange); background: #fed7aa; }
+.upload-orange .upload-placeholder p { color: var(--orange); }
+.btn-cambiar-orange { border-color: var(--orange); color: var(--orange); }
+.btn-cambiar-orange:hover { background: var(--orange); color: white; }
+.textarea-orange { border-color: rgba(249,115,22,0.25); background: var(--orange-light); }
+.textarea-orange:focus { border-color: var(--orange); background: white; }
+.chip-orange { background: var(--orange-light); color: var(--orange-dark); border-color: rgba(249,115,22,0.3); }
+.chip-orange:hover { background: var(--orange); color: white; }
+.loader-ring.orange { border-color: var(--orange-light); border-top-color: var(--orange); }
+.loading-step.orange { color: var(--orange-dark); }
+.coloreable-preview {
+  background: white;
+  border-radius: var(--radius-sm);
+  border: 2px solid rgba(249,115,22,0.2);
+  padding: 1rem;
+  margin-bottom: 1.2rem;
+  text-align: center;
+}
+.coloreable-img {
+  max-width: 100%;
+  max-height: 400px;
+  border-radius: 8px;
+  object-fit: contain;
+}
